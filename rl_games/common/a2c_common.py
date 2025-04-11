@@ -1,5 +1,6 @@
 import copy
 import os
+import gc
 
 from rl_games.common import vecenv
 
@@ -1119,6 +1120,7 @@ class DiscreteA2CBase(A2CBase):
                     if self.save_freq > 0:
                         if epoch_num % self.save_freq == 0:
                             self.save(os.path.join(self.nn_dir, 'last_' + checkpoint_name))
+                            gc.collect() # memory overflow: Isaac4.5/IsaacLab2.0 issue
 
                     if mean_rewards[0] > self.last_mean_rewards and epoch_num >= self.save_best_after:
                         print('saving next best rewards: ', mean_rewards)
@@ -1401,6 +1403,7 @@ class ContinuousA2CBase(A2CBase):
                     if self.save_freq > 0:
                         if epoch_num % self.save_freq == 0:
                             self.save(os.path.join(self.nn_dir, 'last_' + checkpoint_name))
+                            gc.collect() # memory overflow: Isaac4.5/IsaacLab2.0 issue
 
                     if mean_rewards[0] > self.last_mean_rewards and epoch_num >= self.save_best_after:
                         print('saving next best rewards: ', mean_rewards)
