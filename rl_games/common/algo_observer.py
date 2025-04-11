@@ -124,7 +124,8 @@ class IsaacAlgoObserver(AlgoObserver):
                         ep_info[key] = ep_info[key].unsqueeze(0)
                     info_tensor = torch.cat((info_tensor, ep_info[key].to(self.algo.device)))
                 value = torch.mean(info_tensor)
-                self.writer.add_scalar("Episode/" + key, value, epoch_num)
+                # self.writer.add_scalar("Episode/" + key, value, epoch_num)
+                self.writer.add_scalar(key, value, epoch_num)
             self.ep_infos.clear()
         # log scalars from env information
         for k, v in self.direct_info.items():
