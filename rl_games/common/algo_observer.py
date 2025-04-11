@@ -119,7 +119,14 @@ class IsaacAlgoObserver(AlgoObserver):
                 for ep_info in self.ep_infos:
                     # handle scalar and zero dimensional tensor infos
                     if not isinstance(ep_info[key], torch.Tensor):
-                        ep_info[key] = torch.Tensor([ep_info[key]])
+                        if isinstance(ep_info[key], (float, int)):
+                            ep_info[key] = torch.Tensor([ep_info[key]])
+                        elif isinstance(ep_info[key], (np.float16, np.float32, np.float64, np.int16, np.int32, np.int64)):
+                            ep_info[key] = torch.Tensor([ep_info[key].item()])
+                        elif isinstance(ep_info[key], np.ndarray):
+                            ep_info[key] = torch.from_numpy(ep_info[key])
+                        elif isinstance(ep_info[key], list):
+                            ep_info[key] = torch.Tensor(ep_info[key])
                     if len(ep_info[key].shape) == 0:
                         ep_info[key] = ep_info[key].unsqueeze(0)
                     info_tensor = torch.cat((info_tensor, ep_info[key].to(self.algo.device)))
