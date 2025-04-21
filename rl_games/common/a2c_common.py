@@ -1131,6 +1131,7 @@ class DiscreteA2CBase(A2CBase):
                             if self.last_mean_rewards > self.config['score_to_win']:
                                 print('Maximum reward achieved. Network won!')
                                 self.save(os.path.join(self.nn_dir, checkpoint_name))
+                                gc.collect() # memory overflow: Isaac4.5/IsaacLab2.0 issue
                                 should_exit = True
 
                 if epoch_num >= self.max_epochs and self.max_epochs != -1:
@@ -1414,6 +1415,7 @@ class ContinuousA2CBase(A2CBase):
                             if self.last_mean_rewards > self.config['score_to_win']:
                                 print('Maximum reward achieved. Network won!')
                                 self.save(os.path.join(self.nn_dir, checkpoint_name))
+                                gc.collect() # memory overflow: Isaac4.5/IsaacLab2.0 issue
                                 should_exit = True
 
                 if epoch_num >= self.max_epochs and self.max_epochs != -1:

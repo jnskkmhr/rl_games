@@ -16,6 +16,7 @@ import torch.nn.functional as F
 import numpy as np
 import time
 import os
+import gc
 
 
 class SACAgent(BaseAlgorithm):
@@ -589,6 +590,7 @@ class SACAgent(BaseAlgorithm):
                 if self.save_freq > 0:
                     if self.epoch_num % self.save_freq == 0:
                         self.save(os.path.join(self.nn_dir, 'last_' + checkpoint_name))
+                        gc.collect() # memory overflow: Isaac4.5/IsaacLab2.0 issue
 
                 if mean_rewards > self.last_mean_rewards and self.epoch_num >= self.save_best_after:
                     print('saving next best rewards: ', mean_rewards)
