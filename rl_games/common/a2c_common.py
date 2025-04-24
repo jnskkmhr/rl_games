@@ -358,7 +358,26 @@ class A2CBase(BaseAlgorithm):
             network = builder.load(params['config']['central_value_config'])
             self.config['central_value_config']['network'] = network
 
-    def write_stats(self, total_time, epoch_num, step_time, play_time, update_time, a_losses, c_losses, entropies, kls, last_lr, lr_mul, frame, scaled_time, scaled_play_time, curr_frames):
+    def write_stats(
+        self, 
+        total_time, 
+        epoch_num, 
+        step_time, 
+        play_time, 
+        update_time, 
+        a_losses, 
+        c_losses, 
+        entropies, 
+        kls, 
+        last_lr, 
+        lr_mul, 
+        frame, 
+        scaled_time, 
+        scaled_play_time, 
+        curr_frames, 
+        means=None, 
+        stds=None,):
+        
         # do we need scaled time?
         self.diagnostics.send_info(self.writer)
         self.writer.add_scalar('performance/step_inference_rl_update_fps', curr_frames / scaled_time, frame)
@@ -378,6 +397,11 @@ class A2CBase(BaseAlgorithm):
         self.writer.add_scalar('info/e_clip', self.e_clip * lr_mul, frame)
         self.writer.add_scalar('info/kl', torch_ext.mean_list(kls).item(), frame)
         self.writer.add_scalar('info/epochs', epoch_num, frame)
+        
+        if means is not None:
+            self.writer.add_scalar('info/mean', torch_ext.mean_list(means).item(), frame)
+        if stds is not None:
+            self.writer.add_scalar('info/std', torch_ext.mean_list(stds).item(), frame)
         self.algo_observer.after_print_stats(frame, epoch_num, total_time)
 
     def set_eval(self):
@@ -1225,6 +1249,8 @@ class ContinuousA2CBase(A2CBase):
         b_losses = []
         entropies = []
         kls = []
+        means = []
+        stds = []
 
         for mini_ep in range(0, self.mini_epochs_num):
             ep_kls = []
@@ -1234,6 +1260,8 @@ class ContinuousA2CBase(A2CBase):
                 c_losses.append(c_loss)
                 ep_kls.append(kl)
                 entropies.append(entropy)
+                means.append(cmu.mean(dim=1))
+                stds.append(csigma.std(dim=1))
                 if self.bounds_loss_coef is not None:
                     b_losses.append(b_loss)
 
@@ -1264,7 +1292,7 @@ class ContinuousA2CBase(A2CBase):
         update_time = update_time_end - update_time_start
         total_time = update_time_end - play_time_start
 
-        return batch_dict['step_time'], play_time, update_time, total_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul
+        return batch_dict['step_time'], play_time, update_time, total_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul, means, stds
 
     def prepare_dataset(self, batch_dict):
         obses = batch_dict['obses']
@@ -1351,7 +1379,7 @@ class ContinuousA2CBase(A2CBase):
 
         while True:
             epoch_num = self.update_epoch()
-            step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul = self.train_epoch()
+            step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul, means, stds = self.train_epoch()
             total_time += sum_time
             frame = self.frame // self.num_agents
 
@@ -1372,7 +1400,7 @@ class ContinuousA2CBase(A2CBase):
 
                 self.write_stats(total_time, epoch_num, step_time, play_time, update_time,
                                 a_losses, c_losses, entropies, kls, last_lr, lr_mul, frame,
-                                scaled_time, scaled_play_time, curr_frames)
+                                scaled_time, scaled_play_time, curr_frames, means, stds)
 
                 if len(b_losses) > 0:
                     self.writer.add_scalar('losses/bounds_loss', torch_ext.mean_list(b_losses).item(), frame)
