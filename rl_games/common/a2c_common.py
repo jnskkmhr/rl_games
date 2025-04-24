@@ -259,7 +259,8 @@ class A2CBase(BaseAlgorithm):
         self.mini_epochs_num = self.config['mini_epochs']
 
         self.mixed_precision = self.config.get('mixed_precision', False)
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.mixed_precision)
+        # self.scaler = torch.cuda.amp.GradScaler(enabled=self.mixed_precision)
+        self.scaler = torch.amp.autocast('cuda', enabled=self.mixed_precision)
 
         self.last_lr = self.config['learning_rate']
         self.frame = 0
