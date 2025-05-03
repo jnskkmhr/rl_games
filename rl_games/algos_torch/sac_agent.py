@@ -41,9 +41,7 @@ class SACAgent(BaseAlgorithm):
 
         # TODO: double-check! To use bootstrap instead?
         self.max_env_steps = config.get("max_env_steps", 1000) # temporary, in future we will use other approach
-
-        print(self.batch_size, self.num_actors, self.num_agents)
-
+        
         self.num_frames_per_epoch = self.num_actors * self.num_steps_per_episode
 
         self.log_alpha = torch.tensor(np.log(self.init_alpha)).float().to(self._device)
@@ -67,7 +65,7 @@ class SACAgent(BaseAlgorithm):
         self.model = self.network.build(net_config)
         self.model.to(self._device)
 
-        print("Number of Agents", self.num_actors, "Batch Size", self.batch_size)
+        print("Batch Size", self.batch_size, "Number of Actors", self.num_actors, "Number of Agents", self.num_agents)
 
         self.actor_optimizer = torch.optim.Adam(self.model.sac_network.actor.parameters(),
                                                 lr=float(self.config['actor_lr']),
@@ -599,6 +597,7 @@ class SACAgent(BaseAlgorithm):
                     if self.last_mean_rewards > self.config.get('score_to_win', float('inf')):
                         print('Maximum reward achieved. Network won!')
                         self.save(os.path.join(self.nn_dir, checkpoint_name))
+                        gc.collect() # memory overflow: Isaac4.5/IsaacLab2.0 issue
                         should_exit = True
 
                 if self.epoch_num >= self.max_epochs and self.max_epochs != -1:
