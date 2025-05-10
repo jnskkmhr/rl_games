@@ -48,7 +48,6 @@ class BaseModelNetwork(nn.Module):
                 self.running_mean_std = RunningMeanStdObs(obs_shape)
             else:
                 self.running_mean_std = RunningMeanStd(obs_shape)
-
     def norm_obs(self, observation):
         with torch.no_grad():
             return self.running_mean_std(observation) if self.normalize_input else observation
