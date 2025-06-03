@@ -1,3 +1,4 @@
+import torch
 from torch import distributions as pyd
 import math
 import torch.nn.functional as F
@@ -22,11 +23,16 @@ class TanhTransform(pyd.transforms.Transform):
 
     def _call(self, x):
         return x.tanh()
-
+    
     def _inverse(self, y):
-        # We do not clamp to the boundary here as it may degrade the performance of certain algorithms.
-        # one should use `cache_size=1` instead
-        return self.atanh(y)
+        # Clamp y to the range (-1, 1) to avoid numerical issues with atanh
+        eps = torch.finfo(y.dtype).eps
+        return self.atanh(y.clamp(-1.0+eps, 1.0-eps))
+
+    # def _inverse(self, y):
+    #     # We do not clamp to the boundary here as it may degrade the performance of certain algorithms.
+    #     # one should use `cache_size=1` instead
+    #     return self.atanh(y)
 
     def log_abs_det_jacobian(self, x, y):
         # We use a formula that is more numerically stable, see details in the following link
