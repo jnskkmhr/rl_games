@@ -87,6 +87,9 @@ class SACAgent(BaseAlgorithm):
         self.target_entropy = self.target_entropy_coef * -self.env_info['action_space'].shape[0]
         print("Target entropy", self.target_entropy)
 
+        self.bound_loss_type = self.config.get('bound_loss_type', 'bound') # 'regularisation' or 'bound'
+        self.bounds_loss_coef = config.get('bounds_loss_coef', None)
+
         self.algo_observer = config['features']['observer']
 
     def load_networks(self, params):
@@ -307,7 +310,16 @@ class SACAgent(BaseAlgorithm):
         actor_Q1, actor_Q2 = self.model.critic(obs, action)
         actor_Q = torch.min(actor_Q1, actor_Q2)
 
-        actor_loss = (torch.max(self.alpha.detach(), self.min_alpha) * log_prob - actor_Q)
+        # bound loss (see a2c_continuous.py)
+        mu = dist.loc
+        if self.bound_loss_type == 'regularization':
+            b_loss = self.bounds_loss_coef * self.reg_loss(mu)
+        elif self.bound_loss_type == 'bound':
+            b_loss = self.bounds_loss_coef * self.bound_loss(mu)
+        else:
+            b_loss = torch.zeros(1, device=self._device)
+
+        actor_loss = (torch.max(self.alpha.detach(), self.min_alpha) * log_prob - actor_Q) + b_loss
         actor_loss = actor_loss.mean()
 
         self.actor_optimizer.zero_grad(set_to_none=True)
@@ -327,6 +339,23 @@ class SACAgent(BaseAlgorithm):
             alpha_loss = None
 
         return actor_loss.detach(), entropy.detach(), self.alpha.detach(), alpha_loss # TODO: maybe not self.alpha
+    
+    def reg_loss(self, mu):
+        if self.bounds_loss_coef is not None:
+            reg_loss = (mu*mu).sum(axis=-1)
+        else:
+            reg_loss = 0
+        return reg_loss
+    
+    def bound_loss(self, mu):
+        if self.bounds_loss_coef is not None:
+            soft_bound = 1.1
+            mu_loss_high = torch.clamp_min(mu - soft_bound, 0.0)**2
+            mu_loss_low = torch.clamp_max(mu + soft_bound, 0.0)**2
+            b_loss = (mu_loss_low + mu_loss_high).sum(axis=-1)
+        else:
+            b_loss = 0
+        return b_loss
 
     def soft_update_params(self, net, target_net, tau):
         for param, target_param in zip(net.parameters(), target_net.parameters()):

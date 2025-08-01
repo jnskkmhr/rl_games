@@ -236,6 +236,13 @@ class SACPlayer(BasePlayer):
         if self.has_batch_dimension == False:
             actions = torch.squeeze(actions.detach())
         return actions
+    
+    def get_action_distribution_params(self, obs):
+        if self.has_batch_dimension == False:
+            obs = unsqueeze_obs(obs)
+        obs = self.model.norm_obs(obs)
+        dist = self.model.actor(obs)
+        return dist.mean, dist.loc, dist.scale
 
     def reset(self):
         pass

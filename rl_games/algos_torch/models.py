@@ -447,7 +447,9 @@ class TanhBijector:
         return torch.tanh(x)
 
     def inverse(self, y):
-        y = torch.clamp(y, -0.99999997, 0.99999997)
+        # y = torch.clamp(y, -0.99999997, 0.99999997)
+        eps = torch.finfo(y.dtype).eps
+        y = y.clamp(-1.0 + eps, 1.0 - eps)
         return 0.5 * (y.log1p() - (-y).log1p())
 
     def forward_log_det_jacobian(self, x):
