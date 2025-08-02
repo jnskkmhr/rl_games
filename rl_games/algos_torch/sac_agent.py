@@ -338,7 +338,7 @@ class SACAgent(BaseAlgorithm):
         else:
             alpha_loss = None
 
-        return actor_loss.detach(), entropy.detach(), self.alpha.detach(), alpha_loss # TODO: maybe not self.alpha
+        return actor_loss.detach(), entropy.detach(), self.alpha.detach(), alpha_loss, b_loss.mean().detach() # TODO: maybe not self.alpha
     
     def reg_loss(self, mu):
         if self.bounds_loss_coef is not None:
@@ -370,9 +370,9 @@ class SACAgent(BaseAlgorithm):
         next_obs = self.preproc_obs(next_obs)
         critic_loss, critic1_loss, critic2_loss = self.update_critic(obs, action, reward, next_obs, not_done, step)
 
-        actor_loss, entropy, alpha, alpha_loss = self.update_actor_and_alpha(obs, step)
+        actor_loss, entropy, alpha, alpha_loss, b_loss = self.update_actor_and_alpha(obs, step)
 
-        actor_loss_info = actor_loss, entropy, alpha, alpha_loss
+        actor_loss_info = actor_loss, entropy, alpha, alpha_loss, b_loss
         self.soft_update_params(self.model.sac_network.critic, self.model.sac_network.critic_target,
                                      self.critic_tau)
         return actor_loss_info, critic1_loss, critic2_loss
@@ -453,14 +453,16 @@ class SACAgent(BaseAlgorithm):
 
         return actions
 
-    def extract_actor_stats(self, actor_losses, entropies, alphas, alpha_losses, actor_loss_info):
-        actor_loss, entropy, alpha, alpha_loss = actor_loss_info
+    def extract_actor_stats(self, actor_losses, entropies, alphas, alpha_losses, b_losses, actor_loss_info):
+        actor_loss, entropy, alpha, alpha_loss, b_loss = actor_loss_info
 
         actor_losses.append(actor_loss)
         entropies.append(entropy)
         if alpha_losses is not None:
             alphas.append(alpha)
             alpha_losses.append(alpha_loss)
+        if self.bounds_loss_coef is not None:
+            b_losses.append(b_loss)
 
     def clear_stats(self):
         self.game_rewards.clear()
@@ -477,6 +479,7 @@ class SACAgent(BaseAlgorithm):
         entropies = []
         alphas = []
         alpha_losses = []
+        b_losses = []
         critic1_losses = []
         critic2_losses = []
 
@@ -540,7 +543,7 @@ class SACAgent(BaseAlgorithm):
                 update_time_end = time.perf_counter()
                 update_time = update_time_end - update_time_start
 
-                self.extract_actor_stats(actor_losses, entropies, alphas, alpha_losses, actor_loss_info)
+                self.extract_actor_stats(actor_losses, entropies, alphas, alpha_losses, b_losses, actor_loss_info)
                 critic1_losses.append(critic1_loss)
                 critic2_losses.append(critic2_loss)
             else:
@@ -552,7 +555,7 @@ class SACAgent(BaseAlgorithm):
         total_time = total_time_end - total_time_start
         play_time = total_time - total_update_time
 
-        return step_time, play_time, total_update_time, total_time, actor_losses, entropies, alphas, alpha_losses, critic1_losses, critic2_losses
+        return step_time, play_time, total_update_time, total_time, actor_losses, entropies, alphas, alpha_losses, b_losses, critic1_losses, critic2_losses
 
     def train_epoch(self):
         random_exploration = self.epoch_num < self.num_warmup_steps
@@ -568,7 +571,7 @@ class SACAgent(BaseAlgorithm):
 
         while True:
             self.epoch_num += 1
-            step_time, play_time, update_time, epoch_total_time, actor_losses, entropies, alphas, alpha_losses, critic1_losses, critic2_losses = self.train_epoch()
+            step_time, play_time, update_time, epoch_total_time, actor_losses, entropies, alphas, alpha_losses, b_losses, critic1_losses, critic2_losses = self.train_epoch()
 
             total_time += epoch_total_time
 
@@ -598,6 +601,9 @@ class SACAgent(BaseAlgorithm):
                 if alpha_losses[0] is not None:
                     self.writer.add_scalar('losses/alpha_loss', torch_ext.mean_list(alpha_losses).item(), self.frame)
                 self.writer.add_scalar('info/alpha', torch_ext.mean_list(alphas).item(), self.frame)
+
+                if self.bounds_loss_coef is not None:
+                    self.writer.add_scalar('losses/b_loss', torch_ext.mean_list(b_losses).item(), self.frame)
 
             self.writer.add_scalar('info/epochs', self.epoch_num, self.frame)
             self.algo_observer.after_print_stats(self.frame, self.epoch_num, total_time)
