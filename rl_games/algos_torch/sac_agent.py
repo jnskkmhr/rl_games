@@ -87,11 +87,13 @@ class SACAgent(BaseAlgorithm):
         self.target_entropy = self.target_entropy_coef * -self.env_info['action_space'].shape[0]
         print("Target entropy", self.target_entropy)
 
-        # self.bound_loss_type: list[str] = self.config.get('bound_loss_type', ['bound']) # 'regularisation' or 'bound'
         self.bounds_loss_coef = config.get('bounds_loss_coef', None)
         self.bounds_loss_soft_bound: list[float] = self.config.get('bounds_loss_soft_bound', [-1.0, 1.0])
         self.bounds_loss_action_dim: list[int] = self.config.get('bounds_loss_action_dim', None)
+
         self.reg_loss_coef = config.get('reg_loss_coef', None)
+        self.left_nominal_action_dim: list[int] = self.config.get('left_nominal_action_dim', None)
+        self.right_nominal_action_dim: list[int] = self.config.get('right_nominal_action_dim', None)
 
         self.algo_observer = config['features']['observer']
 
@@ -347,7 +349,15 @@ class SACAgent(BaseAlgorithm):
         return actor_loss.detach(), entropy.detach(), self.alpha.detach(), alpha_loss, b_loss.mean().detach(), reg_loss.mean().detach() # TODO: maybe not self.alpha
     
     def reg_loss(self, mu):
-        reg_loss = (mu*mu).sum(axis=-1)
+        mu_processed = mu.clone()
+        if self.left_nominal_action_dim is not None:
+            mu_processed[:, self.left_nominal_action_dim] = 1 + mu_processed[:, self.left_nominal_action_dim] # 0 norm means action=-1
+            reg_loss = (mu_processed * mu_processed).sum(axis=-1)
+        elif self.right_nominal_action_dim is not None:
+            mu_processed[:, self.right_nominal_action_dim] = -1 + mu_processed[:, self.right_nominal_action_dim] # 0 norm means action=1
+            reg_loss = (mu_processed * mu_processed).sum(axis=-1)
+        else:
+            reg_loss = (mu_processed * mu_processed).sum(axis=-1)
         return reg_loss
     
     def bound_loss(self, mu):
