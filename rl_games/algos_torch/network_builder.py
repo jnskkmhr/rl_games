@@ -311,10 +311,17 @@ class A2CBuilder(NetworkBuilder):
                 if isinstance(m, nn.Linear):
                     mlp_init(m.weight)
                     if getattr(m, "bias", None) is not None:
-                        torch.nn.init.zeros_(m.bias)    
+                        torch.nn.init.zeros_(m.bias)
 
             if self.is_continuous:
                 mu_init(self.mu.weight)
+                if getattr(self.mu, "bias", None) is not None:
+                    if self.space_config["mu_init"].get("bias", None) is not None:
+                        assert len(self.space_config["mu_init"]["bias"]) == self.mu.bias.shape[0], "mu bias shape should match action dimensions"
+                        bias_init = torch.tensor(self.space_config["mu_init"]["bias"], dtype=torch.float32, device=self.mu.bias.device)
+                        self.mu.bias.copy_(bias_init)
+                    else:
+                        torch.nn.init.zeros_(self.mu.bias)
                 if self.fixed_sigma:
                     sigma_init(self.sigma)
                 else:
