@@ -1366,6 +1366,16 @@ class SACBuilder(NetworkBuilder):
                     if getattr(m, "bias", None) is not None:
                         torch.nn.init.zeros_(m.bias)
 
+            # set bias
+            mu_layer = self.actor.trunk[-1]
+            if getattr(mu_layer, "bias", None) is not None:
+                if self.space_config["mu_init"].get("bias", None) is not None:
+                    assert len(self.space_config["mu_init"]["bias"]) == mu_layer.bias.shape[0], "mu bias shape should match action dimensions"
+                    bias_init = torch.tensor(self.space_config["mu_init"]["bias"], dtype=torch.float32, device=mu_layer.bias.device)
+                    mu_layer.bias.copy_(bias_init)
+                else:
+                    torch.nn.init.zeros_(mu_layer.bias)
+
         def _build_critic(self, output_dim, **mlp_args):
             return DoubleQCritic(output_dim, **mlp_args)
 
