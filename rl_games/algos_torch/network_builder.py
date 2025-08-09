@@ -315,17 +315,10 @@ class A2CBuilder(NetworkBuilder):
 
             if self.is_continuous:
                 mu_init(self.mu.weight)
-                if getattr(self.mu, "bias", None) is not None:
-                    if self.space_config["mu_init"].get("bias", None) is not None:
-                        assert len(self.space_config["mu_init"]["bias"]) == self.mu.bias.shape[0], "mu bias shape should match action dimensions"
-                        bias_init = torch.tensor(self.space_config["mu_init"]["bias"], dtype=torch.float32, device=self.mu.bias.device)
-                        self.mu.bias.copy_(bias_init)
-                    else:
-                        torch.nn.init.zeros_(self.mu.bias)
                 if self.fixed_sigma:
                     sigma_init(self.sigma)
                 else:
-                    sigma_init(self.sigma.weight)  
+                    sigma_init(self.sigma.weight) 
 
         def forward(self, obs_dict):
             obs = obs_dict['obs']
@@ -1366,15 +1359,22 @@ class SACBuilder(NetworkBuilder):
                     if getattr(m, "bias", None) is not None:
                         torch.nn.init.zeros_(m.bias)
 
-            # set bias
+            # initialize action (mu and log_std) head
             mu_layer = self.actor.trunk[-1]
-            if getattr(mu_layer, "bias", None) is not None:
-                if self.space_config["mu_init"].get("bias", None) is not None:
-                    assert len(self.space_config["mu_init"]["bias"]) == mu_layer.bias.shape[0], "mu bias shape should match action dimensions"
-                    bias_init = torch.tensor(self.space_config["mu_init"]["bias"], dtype=torch.float32, device=mu_layer.bias.device)
-                    mu_layer.bias.copy_(bias_init)
-                else:
-                    torch.nn.init.zeros_(mu_layer.bias)
+            mu_init = self.init_factory.create(**self.space_config['mu_init'])
+            if isinstance(mu_layer, nn.Linear):
+                mu_init(mu_layer.weight)
+                if getattr(mu_layer, "bias", None) is not None:
+                    if self.space_config["mu_init"].get("bias", None) is not None:
+                        assert 2*len(self.space_config["mu_bias"]) == mu_layer.bias.shape[0], "mu bias shape should match action dimensions"
+                        bias_init = torch.hstack([
+                            torch.tensor(self.space_config["mu_bias"], dtype=torch.float32, device=mu_layer.bias.device), # mu
+                            torch.zeros(len(self.space_config["mu_bias"]), dtype=torch.float32, device=mu_layer.bias.device) # sigma
+                        ])
+                        with torch.no_grad():
+                            mu_layer.bias.copy_(bias_init)
+                    else:
+                        torch.nn.init.zeros_(mu_layer.bias)
 
         def _build_critic(self, output_dim, **mlp_args):
             return DoubleQCritic(output_dim, **mlp_args)
