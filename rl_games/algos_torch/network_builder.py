@@ -1365,7 +1365,7 @@ class SACBuilder(NetworkBuilder):
             if isinstance(mu_layer, nn.Linear):
                 mu_init(mu_layer.weight)
                 if getattr(mu_layer, "bias", None) is not None:
-                    if self.space_config["mu_init"].get("bias", None) is not None:
+                    if self.space_config.get("mu_bias", None) is not None:
                         assert 2*len(self.space_config["mu_bias"]) == mu_layer.bias.shape[0], "mu bias shape should match action dimensions"
                         bias_init = torch.hstack([
                             torch.tensor(self.space_config["mu_bias"], dtype=torch.float32, device=mu_layer.bias.device), # mu
