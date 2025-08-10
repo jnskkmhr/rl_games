@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 from rl_games.algos_torch.d2rl import D2RLNet
-from rl_games.algos_torch.sac_helper import  SquashedNormal
+from rl_games.algos_torch.sac_helper import  SquashedNormal, pyd
 from rl_games.common.layers.recurrent import  GRUWithDones, LSTMWithDones
 from rl_games.common.layers.value import  TwoHotEncodedValue, DefaultValue
 from rl_games.algos_torch.spatial_softmax import SpatialSoftArgmax
@@ -1248,10 +1248,11 @@ class A2CResnetBuilder(NetworkBuilder):
 
 class DiagGaussianActor(NetworkBuilder.BaseNetwork):
     """torch.distributions implementation of an diagonal Gaussian policy."""
-    def __init__(self, output_dim, log_std_bounds, **mlp_args):
+    def __init__(self, output_dim, log_std_bounds, squash_output, **mlp_args):
         super().__init__()
 
         self.log_std_bounds = log_std_bounds
+        self.squash_output = squash_output
 
         self.trunk = self._build_mlp(**mlp_args)
         last_layer = list(self.trunk.children())[-2].out_features
@@ -1269,8 +1270,10 @@ class DiagGaussianActor(NetworkBuilder.BaseNetwork):
         std = log_std.exp()
 
         # TODO: Refactor
-
-        dist = SquashedNormal(mu, std)
+        if self.squash_output: 
+            dist = SquashedNormal(mu, std) # squashed   
+        else:
+            dist = pyd.Normal(mu, std) # unsquashed
         # Modify to only return mu and std
         return dist
 
@@ -1339,7 +1342,7 @@ class SACBuilder(NetworkBuilder):
                 'norm_only_first_layer' : self.norm_only_first_layer
             }
             print("Building Actor")
-            self.actor = self._build_actor(2*action_dim, self.log_std_bounds, **actor_mlp_args)
+            self.actor = self._build_actor(2*action_dim, self.log_std_bounds, self.squash_output, **actor_mlp_args)
 
             if self.separate:
                 print("Building Critic")
@@ -1379,8 +1382,8 @@ class SACBuilder(NetworkBuilder):
         def _build_critic(self, output_dim, **mlp_args):
             return DoubleQCritic(output_dim, **mlp_args)
 
-        def _build_actor(self, output_dim, log_std_bounds, **mlp_args):
-            return DiagGaussianActor(output_dim, log_std_bounds, **mlp_args)
+        def _build_actor(self, output_dim, log_std_bounds, squash_output, **mlp_args):
+            return DiagGaussianActor(output_dim, log_std_bounds, squash_output, **mlp_args)
 
         def forward(self, obs_dict):
             """TODO"""
@@ -1393,6 +1396,7 @@ class SACBuilder(NetworkBuilder):
 
         def load(self, params):
             self.separate = params.get('separate', True)
+            self.squash_output = params.get('squash_output', True)
             self.units = params['mlp']['units']
             self.activation = params['mlp']['activation']
             self.initializer = params['mlp']['initializer']

@@ -13,6 +13,7 @@ from torch import optim
 import torch 
 from torch import nn
 import torch.nn.functional as F
+import math
 import numpy as np
 import time
 import os
@@ -25,6 +26,7 @@ class SACAgent(BaseAlgorithm):
 
         self.config = config = params['config']
         print(config)
+        self.network_config = params['network']
 
         # TODO: Get obs shape and self.network
         self.load_networks(params)
@@ -349,19 +351,28 @@ class SACAgent(BaseAlgorithm):
         return actor_loss.detach(), entropy.detach(), self.alpha.detach(), alpha_loss, b_loss.mean().detach(), reg_loss.mean().detach() # TODO: maybe not self.alpha
     
     def reg_loss(self, mu):
-        mu_processed = torch.tanh(mu.clone()) # apply regularization to squashed action
+        mu_processed = mu.clone()
+        
         if self.left_nominal_action_dim is not None:
-            mu_processed[:, self.left_nominal_action_dim] = 1 + mu_processed[:, self.left_nominal_action_dim] # 0 norm means action=-1
+            if self.network_config.get('squash_output', True):
+                mu_processed[:, self.left_nominal_action_dim] = math.atanh(1-1e-6) + mu_processed[:, self.left_nominal_action_dim] # 0 norm means action=-1
+            else:
+                mu_processed[:, self.left_nominal_action_dim] = 1 + mu_processed[:, self.left_nominal_action_dim] # 0 norm means action=-1
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
+
         elif self.right_nominal_action_dim is not None:
-            mu_processed[:, self.right_nominal_action_dim] = -1 + mu_processed[:, self.right_nominal_action_dim] # 0 norm means action=1
+            if self.network_config.get('squash_output', True):
+                mu_processed[:, self.right_nominal_action_dim] = math.atanh(-1+1e-6) + mu_processed[:, self.right_nominal_action_dim] # 0 norm means action=1
+            else:
+                mu_processed[:, self.right_nominal_action_dim] = -1 + mu_processed[:, self.right_nominal_action_dim] # 0 norm means action=1
+            
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
         else:
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
         return reg_loss
     
     def bound_loss(self, mu):
-        mu_processed = torch.tanh(mu.clone()) # apply regularization to squashed action
+        mu_processed = mu.clone()
         lb = self.bounds_loss_soft_bound[0]
         ub = self.bounds_loss_soft_bound[1]
         if self.bounds_loss_action_dim is None:
