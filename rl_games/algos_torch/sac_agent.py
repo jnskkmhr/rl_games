@@ -349,7 +349,7 @@ class SACAgent(BaseAlgorithm):
         return actor_loss.detach(), entropy.detach(), self.alpha.detach(), alpha_loss, b_loss.mean().detach(), reg_loss.mean().detach() # TODO: maybe not self.alpha
     
     def reg_loss(self, mu):
-        mu_processed = mu.clone()
+        mu_processed = torch.tanh(mu.clone()) # apply regularization to squashed action
         if self.left_nominal_action_dim is not None:
             mu_processed[:, self.left_nominal_action_dim] = 1 + mu_processed[:, self.left_nominal_action_dim] # 0 norm means action=-1
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
@@ -361,14 +361,15 @@ class SACAgent(BaseAlgorithm):
         return reg_loss
     
     def bound_loss(self, mu):
+        mu_processed = torch.tanh(mu.clone()) # apply regularization to squashed action
         lb = self.bounds_loss_soft_bound[0]
         ub = self.bounds_loss_soft_bound[1]
         if self.bounds_loss_action_dim is None:
             action_dim = slice(None)
         else:
             action_dim = self.bounds_loss_action_dim
-        mu_loss_high = torch.clamp_min(mu[:, action_dim] - ub, 0.0)**2 # violate mu >= ub
-        mu_loss_low = torch.clamp_max(mu[:, action_dim] - lb, 0.0)**2 # violate mu <= -lb
+        mu_loss_high = torch.clamp_min(mu_processed[:, action_dim] - ub, 0.0)**2 # violate mu >= ub
+        mu_loss_low = torch.clamp_max(mu_processed[:, action_dim] - lb, 0.0)**2 # violate mu <= -lb
         b_loss = (mu_loss_low + mu_loss_high).sum(axis=-1)
         return b_loss
 
