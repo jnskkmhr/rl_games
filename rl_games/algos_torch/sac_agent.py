@@ -90,7 +90,8 @@ class SACAgent(BaseAlgorithm):
         print("Target entropy", self.target_entropy)
 
         self.bounds_loss_coef = config.get('bounds_loss_coef', None)
-        self.bounds_loss_soft_bound: list[float] = self.config.get('bounds_loss_soft_bound', [-1.0, 1.0])
+        self.bounds_loss_soft_lower_bound: list[float] = self.config.get('bounds_loss_soft_lower_bound', [-1.0])
+        self.bounds_loss_soft_upper_bound: list[float] = self.config.get('bounds_loss_soft_upper_bound', [1.0])
         self.bounds_loss_action_dim: list[int] = self.config.get('bounds_loss_action_dim', None)
 
         self.reg_loss_coef = config.get('reg_loss_coef', None)
@@ -350,36 +351,48 @@ class SACAgent(BaseAlgorithm):
 
         return actor_loss.detach(), entropy.detach(), self.alpha.detach(), alpha_loss, b_loss.mean().detach(), reg_loss.mean().detach() # TODO: maybe not self.alpha
     
+    @staticmethod
+    def atanh(x:float):
+        eps = 1e-6
+        x = np.clip(x, -1.0 + eps, 1.0 - eps)
+        return 0.5 * (np.log1p(x) - np.log1p(-x))
+
     def reg_loss(self, mu):
-        squash_output = self.network_config.get('squash_output', True)
-        if squash_output:
-            mu_processed = torch.tanh(mu.clone())
-        else:
-            mu_processed = mu.clone()
+        mu_processed = mu.clone() # better to use unsquashed mu for numerical stability?
         if self.left_nominal_action_dim is not None:
             mask = torch.zeros_like(mu_processed)
             mask[:, self.left_nominal_action_dim] = 1
-            mu_processed = mu_processed + mask * 1  # 0 norm means action=-1
+            mu_processed = mu_processed + mask * self.atanh(1)  # 0 norm means action=-1
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
         elif self.right_nominal_action_dim is not None:
             mask = torch.zeros_like(mu_processed)
             mask[:, self.right_nominal_action_dim] = -1
-            mu_processed = mu_processed + mask * 1  # 0 norm means action=1
+            mu_processed = mu_processed + mask * self.atanh(1)  # 0 norm means action=1
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
         else:
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
         return reg_loss
     
     def bound_loss(self, mu):
-        mu_processed = mu.clone()
-        lb = self.bounds_loss_soft_bound[0]
-        ub = self.bounds_loss_soft_bound[1]
+        mu_processed = mu.clone() # better to use unsquashed mu for numerical stability?
+        # lb = self.bounds_loss_soft_lower_bound
+        # ub = self.bounds_loss_soft_upper_bound
+
+        # inverse transform from squashed action space to unsquashed
+        lb = self.atanh(self.bounds_loss_soft_lower_bound)
+        ub = self.atanh(self.bounds_loss_soft_upper_bound)
+
         if self.bounds_loss_action_dim is None:
             action_dim = slice(None)
         else:
             action_dim = self.bounds_loss_action_dim
-        mu_loss_high = torch.clamp_min(mu_processed[:, action_dim] - ub, 0.0)**2 # violate mu >= ub
-        mu_loss_low = torch.clamp_max(mu_processed[:, action_dim] - lb, 0.0)**2 # violate mu <= -lb
+
+        with torch.no_grad():
+            lb_tensor = torch.tensor(lb, device=self._device, dtype=mu_processed.dtype).unsqueeze(0).repeat(mu_processed.shape[0], 1)
+            ub_tensor = torch.tensor(ub, device=self._device, dtype=mu_processed.dtype).unsqueeze(0).repeat(mu_processed.shape[0], 1)
+        
+        mu_loss_high = torch.clamp_min(mu_processed[:, action_dim] - ub_tensor, 0.0)**2 # violate mu >= ub
+        mu_loss_low = torch.clamp_max(mu_processed[:, action_dim] - lb_tensor, 0.0)**2 # violate mu <= -lb
         b_loss = (mu_loss_low + mu_loss_high).sum(axis=-1)
         return b_loss
 
