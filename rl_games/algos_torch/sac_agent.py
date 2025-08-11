@@ -351,21 +351,20 @@ class SACAgent(BaseAlgorithm):
         return actor_loss.detach(), entropy.detach(), self.alpha.detach(), alpha_loss, b_loss.mean().detach(), reg_loss.mean().detach() # TODO: maybe not self.alpha
     
     def reg_loss(self, mu):
-        mu_processed = mu.clone()
-        
+        squash_output = self.network_config.get('squash_output', True)
+        if squash_output:
+            mu_processed = torch.tanh(mu.clone())
+        else:
+            mu_processed = mu.clone()
         if self.left_nominal_action_dim is not None:
-            if self.network_config.get('squash_output', True):
-                mu_processed[:, self.left_nominal_action_dim] = math.atanh(1-1e-6) + mu_processed[:, self.left_nominal_action_dim] # 0 norm means action=-1
-            else:
-                mu_processed[:, self.left_nominal_action_dim] = 1 + mu_processed[:, self.left_nominal_action_dim] # 0 norm means action=-1
+            mask = torch.zeros_like(mu_processed)
+            mask[:, self.left_nominal_action_dim] = 1
+            mu_processed = mu_processed + mask * 1  # 0 norm means action=-1
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
-
         elif self.right_nominal_action_dim is not None:
-            if self.network_config.get('squash_output', True):
-                mu_processed[:, self.right_nominal_action_dim] = math.atanh(-1+1e-6) + mu_processed[:, self.right_nominal_action_dim] # 0 norm means action=1
-            else:
-                mu_processed[:, self.right_nominal_action_dim] = -1 + mu_processed[:, self.right_nominal_action_dim] # 0 norm means action=1
-            
+            mask = torch.zeros_like(mu_processed)
+            mask[:, self.right_nominal_action_dim] = -1
+            mu_processed = mu_processed + mask * 1  # 0 norm means action=1
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
         else:
             reg_loss = (mu_processed * mu_processed).sum(axis=-1)
