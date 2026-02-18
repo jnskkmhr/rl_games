@@ -479,9 +479,11 @@ class SACAgent(BaseAlgorithm):
             obs, action, reward, next_obs, not_done, step
         )
 
-        actor_loss, entropy, alpha, alpha_loss = self.update_actor_and_alpha(obs, step)
+        actor_loss, entropy, alpha, alpha_loss, b_loss, reg_loss = (
+            self.update_actor_and_alpha(obs, step)
+        )
 
-        actor_loss_info = actor_loss, entropy, alpha, alpha_loss
+        actor_loss_info = actor_loss, entropy, alpha, alpha_loss, b_loss, reg_loss
         self.soft_update_params(
             self.model.sac_network.critic,
             self.model.sac_network.critic_target,
